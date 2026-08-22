@@ -1,0 +1,25 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-t", "gcr.io/$PROJECT_ID/jobtracker:$COMMIT_SHA", "."]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/$PROJECT_ID/jobtracker:$COMMIT_SHA"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - "run"
+      - "deploy"
+      - "jobtracker"
+      - "--image"
+      - "gcr.io/$PROJECT_ID/jobtracker:$COMMIT_SHA"
+      - "--region"
+      - "us-central1"
+      - "--platform"
+      - "managed"
+      - "--allow-unauthenticated"
+      - "--set-env-vars"
+      - "DATABASE_URL=$DATABASE_URL,SECRET_KEY=$SECRET_KEY,GCP_PROJECT_ID=$PROJECT_ID"
+
+images:
+  - "gcr.io/$PROJECT_ID/jobtracker:$COMMIT_SHA"
