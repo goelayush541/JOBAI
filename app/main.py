@@ -1,7 +1,11 @@
 from contextlib import asynccontextmanager
+import traceback
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     applications_router,
@@ -30,6 +34,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    tb = traceback.format_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__, "trace": tb[-500:]},
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,11 +65,12 @@ async def health_check():
     return {"status": "healthy", "service": settings.APP_NAME}
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
-    return {
-        "service": settings.APP_NAME,
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/health",
-    }
+    index_path = Path(__file__).parent.parent / "static" / "index.html"
+    return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+
+
+static_dir = Path(__file__).parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")

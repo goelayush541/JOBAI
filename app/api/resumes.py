@@ -42,6 +42,7 @@ async def upload_resume(
         raise HTTPException(status_code=400, detail=f"File type {ext} not supported")
 
     file_url = await storage_service.upload_resume(current_user.user_id, file)
+    await file.seek(0)
     parsed_text = await extract_text(file)
 
     resume = Resume(

@@ -30,8 +30,8 @@ class ApplicationResponse(BaseModel):
 class ApplicationDetailResponse(ApplicationResponse):
     job_title: str | None = None
     company_name: str | None = None
-    matched_skills: dict | None = None
-    missing_skills: dict | None = None
+    matched_skills: list | dict | None = None
+    missing_skills: list | dict | None = None
     tailored_suggestions: str | None = None
 
 
