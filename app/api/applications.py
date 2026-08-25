@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.application import AIInsight, Application, ApplicationStatusHistory
 from app.models.job import Job
+from app.models.reminder import Reminder
 from app.models.resume import Resume
 from app.models.user import User
 from app.schemas.application import (
@@ -91,8 +92,17 @@ async def create_application(
                 tailored_suggestions=analysis.get("tailored_suggestions"),
             )
             db.add(insight)
+            application.status = "applied"
+            logger.info(
+                "Gemini analysis completed for application %s: score=%.1f",
+                application.application_id, analysis.get("relevance_score", 0),
+            )
         except Exception as exc:
-            logger.warning("Gemini analysis failed: %s", exc)
+            application.status = "pending_analysis"
+            logger.warning("Gemini analysis failed for %s: %s", application.application_id, exc)
+    else:
+        application.status = "pending_analysis"
+        logger.info("Application %s pending analysis - missing resume text or job description", application.application_id)
 
     await db.commit()
     await db.refresh(application)
@@ -108,6 +118,67 @@ async def list_applications(
         select(Application).where(Application.user_id == current_user.user_id)
     )
     return [ApplicationResponse.model_validate(a) for a in result.scalars().all()]
+
+
+@router.post("/{application_id}/retry-analysis", response_model=ApplicationResponse)
+async def retry_analysis(
+    application_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Application)
+        .options(selectinload(Application.job), selectinload(Application.resume))
+        .where(
+            Application.application_id == UUID(application_id),
+            Application.user_id == current_user.user_id,
+        )
+    )
+    application = result.scalar_one_or_none()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    if application.status != "pending_analysis":
+        raise HTTPException(status_code=400, detail="Application is not pending analysis")
+
+    resume = application.resume
+    job = application.job
+
+    if resume and resume.parsed_text and job and job.job_description:
+        try:
+            analysis = await gemini_service.analyze_resume_job_fit(
+                resume.parsed_text, job.job_description
+            )
+            application.relevance_score = analysis.get("relevance_score")
+            application.status = "applied"
+
+            existing_insight = await db.execute(
+                select(AIInsight).where(AIInsight.application_id == application.application_id)
+            )
+            insight = existing_insight.scalar_one_or_none()
+            if insight:
+                insight.matched_skills = analysis.get("matched_skills")
+                insight.missing_skills = analysis.get("missing_skills")
+                insight.tailored_suggestions = analysis.get("tailored_suggestions")
+            else:
+                insight = AIInsight(
+                    application_id=application.application_id,
+                    matched_skills=analysis.get("matched_skills"),
+                    missing_skills=analysis.get("missing_skills"),
+                    tailored_suggestions=analysis.get("tailored_suggestions"),
+                )
+                db.add(insight)
+
+            logger.info("Retry analysis completed for %s: score=%.1f", application.application_id, analysis.get("relevance_score", 0))
+        except Exception as exc:
+            logger.warning("Retry analysis failed for %s: %s", application.application_id, exc)
+            raise HTTPException(status_code=500, detail="Analysis failed, try again later")
+    else:
+        raise HTTPException(status_code=400, detail="Missing resume text or job description for analysis")
+
+    await db.commit()
+    await db.refresh(application)
+    return application
 
 
 @router.get("/{application_id}", response_model=ApplicationDetailResponse)
@@ -157,7 +228,7 @@ async def update_application_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    valid_statuses = {"applied", "interview", "offer", "rejected", "withdrawn"}
+    valid_statuses = {"applied", "pending_analysis", "interview", "offer", "rejected", "withdrawn"}
     if payload.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status: {payload.status}")
 
@@ -180,8 +251,28 @@ async def update_application_status(
         notes=payload.notes,
     )
     db.add(history_entry)
+
+    if payload.status == "withdrawn":
+        pending_reminders = await db.execute(
+            select(Reminder).where(
+                Reminder.application_id == application.application_id,
+                Reminder.status == "pending",
+            )
+        )
+        cancelled = pending_reminders.scalars().all()
+        for reminder in cancelled:
+            reminder.status = "cancelled"
+        if cancelled:
+            logger.info(
+                "Auto-cancelled %d reminders for withdrawn application %s",
+                len(cancelled), application.application_id,
+            )
+
     await db.commit()
     await db.refresh(application)
+    logger.info(
+        "Application %s status updated: %s", application.application_id, payload.status,
+    )
     return application
 
 

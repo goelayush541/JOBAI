@@ -1,4 +1,0 @@
-John Doe - Software Engineer
-Skills: Python, JavaScript, React, SQL, Docker
-Experience: 5 years
-Education: BS CS

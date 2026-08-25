@@ -17,9 +17,16 @@ from app.services.storage import storage_service
 router = APIRouter(prefix="/resumes", tags=["Resumes"])
 
 
-async def extract_text(file: UploadFile) -> str:
+async def extract_text(file: UploadFile, file_url: str = None) -> str:
     content = await file.read()
     await file.seek(0)
+
+    if file_url and file_url.startswith("local://") and storage_service.get_decrypted_path:
+        decrypted_path = storage_service.get_decrypted_path(file_url)
+        if decrypted_path and decrypted_path.exists():
+            content = decrypted_path.read_bytes()
+            decrypted_path.unlink()
+
     if file.filename.endswith(".pdf"):
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             return "\n".join(page.extract_text() or "" for page in pdf.pages)
@@ -43,7 +50,7 @@ async def upload_resume(
 
     file_url = await storage_service.upload_resume(current_user.user_id, file)
     await file.seek(0)
-    parsed_text = await extract_text(file)
+    parsed_text = await extract_text(file, file_url)
 
     resume = Resume(
         user_id=current_user.user_id,

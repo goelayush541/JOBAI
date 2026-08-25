@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     CLOUD_TASKS_QUEUE: str = "job-tracker-queue"
     CLOUD_TASKS_LOCATION: str = "us-central1"
 
+    ENCRYPTION_ENABLED: bool = True
+    ENCRYPTION_KEY: str = "local-dev-encryption-key-change-in-production"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

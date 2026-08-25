@@ -21,6 +21,7 @@ class Reminder(Base):
         UUIDType(), ForeignKey("users.user_id"), nullable=False
     )
     reminder_type: Mapped[str] = mapped_column(String(50))
+    channel: Mapped[str] = mapped_column(String(50), default="in_app")
     message: Mapped[str | None] = mapped_column(Text, nullable=True)
     scheduled_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True))
     sent_at: Mapped[datetime | None] = mapped_column(

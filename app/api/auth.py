@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from app.services.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -31,6 +33,7 @@ async def signup(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.commit()
     await db.refresh(user)
+    logger.info("User signed up: %s", user.email)
     return user
 
 
@@ -39,11 +42,13 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
+        logger.warning("Failed login attempt for: %s", payload.email)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user.last_login_at = datetime.now(UTC)
     await db.commit()
     token = create_access_token(data={"sub": str(user.user_id)})
+    logger.info("User logged in: %s", user.email)
     return Token(access_token=token)
 
 

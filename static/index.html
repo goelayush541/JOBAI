@@ -164,6 +164,10 @@
         <div id="page-dashboard">
             <h2 style="margin-bottom:24px">Dashboard</h2>
             <div class="stats-grid" id="stats-grid"></div>
+            <div class="card" style="margin-bottom:24px">
+                <div class="card-header"><h3>Recent Activity</h3></div>
+                <div id="recent-activity" style="padding:16px"></div>
+            </div>
             <div class="card">
                 <div class="card-header"><h3>Recent Applications</h3></div>
                 <div class="app-list" id="dash-apps"></div>
@@ -323,6 +327,16 @@ async function loadDashboard(){
             <div class="stat-card"><div class="label">Pending Reminders</div><div class="value">${d.pending_reminders}</div></div>
             <div class="stat-card"><div class="label">Status Breakdown</div><div class="value" style="font-size:16px">${Object.entries(d.status_breakdown).map(([k,v])=>`${k}: ${v}`).join(', ')||'None'}</div></div>
         `;
+        if(d.recent_activity && d.recent_activity.length){
+            document.getElementById('recent-activity').innerHTML = d.recent_activity.map(a=>`
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+                    <div><strong>${a.job_title}</strong> <span style="color:var(--text-dim)">@ ${a.company_name}</span></div>
+                    <div><span class="badge badge-${a.status}">${a.status}</span> <span style="color:var(--text-dim);font-size:12px">${new Date(a.changed_at).toLocaleDateString()}</span></div>
+                </div>
+            `).join('');
+        } else {
+            document.getElementById('recent-activity').innerHTML = '<p style="color:var(--text-dim)">No recent activity</p>';
+        }
         const apps = await api('GET','/applications/');
         document.getElementById('dash-apps').innerHTML = apps.length ? apps.map(renderAppCard).join('') : '<p style="color:var(--text-dim);padding:20px">No applications yet. Create one to get started!</p>';
     }catch(e){}

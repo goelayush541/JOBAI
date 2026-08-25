@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models.application import Application
+from app.models.application import Application, ApplicationStatusHistory
 from app.models.reminder import Reminder
 from app.models.user import User
 from app.services.auth import get_current_user
@@ -17,7 +18,9 @@ async def get_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     apps_result = await db.execute(
-        select(Application).where(Application.user_id == current_user.user_id)
+        select(Application)
+        .options(selectinload(Application.job))
+        .where(Application.user_id == current_user.user_id)
     )
     applications = apps_result.scalars().all()
 
@@ -39,6 +42,29 @@ async def get_dashboard(
     )
     pending_reminders = reminders_result.scalars().all()
 
+    activity_result = await db.execute(
+        select(ApplicationStatusHistory)
+        .join(Application, ApplicationStatusHistory.application_id == Application.application_id)
+        .options(selectinload(ApplicationStatusHistory.application).selectinload(Application.job))
+        .where(Application.user_id == current_user.user_id)
+        .order_by(desc(ApplicationStatusHistory.changed_at))
+        .limit(10)
+    )
+    recent_history = activity_result.scalars().all()
+
+    recent_activity = []
+    for h in recent_history:
+        job_title = h.application.job.job_title if h.application and h.application.job else "Unknown"
+        company = h.application.job.company_name if h.application and h.application.job else ""
+        recent_activity.append({
+            "application_id": str(h.application_id),
+            "status": h.status,
+            "changed_at": h.changed_at.isoformat(),
+            "notes": h.notes,
+            "job_title": job_title,
+            "company_name": company,
+        })
+
     return {
         "total_applications": total,
         "status_breakdown": by_status,
@@ -53,4 +79,5 @@ async def get_dashboard(
             }
             for r in pending_reminders
         ],
+        "recent_activity": recent_activity,
     }

@@ -20,6 +20,7 @@ else:
 
 class ApplicationStatus(str, enum.Enum):
     applied = "applied"
+    pending_analysis = "pending_analysis"
     interview = "interview"
     offer = "offer"
     rejected = "rejected"
@@ -42,7 +43,7 @@ class Application(Base):
         UUIDType(), ForeignKey("resumes.resume_id"), nullable=False
     )
     status: Mapped[str] = mapped_column(
-        SAEnum("applied", "interview", "offer", "rejected", "withdrawn",
+        SAEnum("applied", "pending_analysis", "interview", "offer", "rejected", "withdrawn",
                name="application_status"),
         default="applied",
     )
@@ -82,8 +83,8 @@ class ApplicationStatusHistory(Base):
         UUIDType(), ForeignKey("applications.application_id"), nullable=False
     )
     status: Mapped[str] = mapped_column(
-        SAEnum("applied", "interview", "offer", "rejected", "withdrawn",
-               name="application_status"),
+        SAEnum("applied", "pending_analysis", "interview", "offer", "rejected", "withdrawn",
+               name="application_status_history_status"),
     )
     changed_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC)

@@ -1,5 +1,5 @@
+import logging
 from contextlib import asynccontextmanager
-import traceback
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -12,6 +12,7 @@ from app.api import (
     auth_router,
     dashboard_router,
     jobs_router,
+    metrics_router,
     reminders_router,
     resumes_router,
 )
@@ -19,6 +20,12 @@ from app.config import get_settings
 from app.database import init_db
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 
 @asynccontextmanager
@@ -37,10 +44,10 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    tb = traceback.format_exc()
+    logger.exception("Unhandled exception: %s", exc)
     return JSONResponse(
         status_code=500,
-        content={"detail": str(exc), "type": type(exc).__name__, "trace": tb[-500:]},
+        content={"detail": "Internal server error"},
     )
 
 app.add_middleware(
@@ -58,6 +65,7 @@ app.include_router(jobs_router, prefix=API_PREFIX)
 app.include_router(applications_router, prefix=API_PREFIX)
 app.include_router(reminders_router, prefix=API_PREFIX)
 app.include_router(dashboard_router, prefix=API_PREFIX)
+app.include_router(metrics_router, prefix=API_PREFIX)
 
 
 @app.get("/health")

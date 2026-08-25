@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,7 @@ from app.services.auth import get_current_user
 from app.services.reminders import reminder_service
 
 router = APIRouter(prefix="/reminders", tags=["Reminders"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=ReminderResponse, status_code=status.HTTP_201_CREATED)
@@ -35,6 +37,7 @@ async def create_reminder(
         application_id=payload.application_id,
         user_id=current_user.user_id,
         reminder_type=payload.reminder_type,
+        channel=payload.channel,
         message=payload.message,
         scheduled_at=payload.scheduled_at,
         status="pending",
@@ -50,6 +53,11 @@ async def create_reminder(
     except Exception:
         pass
 
+    logger.info(
+        "Reminder created: %s for application %s, type=%s, scheduled=%s",
+        reminder.reminder_id, payload.application_id,
+        payload.reminder_type, payload.scheduled_at,
+    )
     return reminder
 
 
@@ -82,4 +90,5 @@ async def cancel_reminder(
     reminder.status = "cancelled"
     await db.commit()
     await db.refresh(reminder)
+    logger.info("Reminder cancelled: %s", reminder.reminder_id)
     return reminder
